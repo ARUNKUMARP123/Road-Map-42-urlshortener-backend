@@ -1,63 +1,100 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const sendEmail = require('../utils/sendEmail');
-const dotenv = require('dotenv');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+const { emailTemplate } = require('../config/mail');
 
-dotenv.config();
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '30d',
+  });
+};
 
-exports.register = async (req, res) => {
+exports.registerUser = async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
   try {
-    const user = new User({ firstName, lastName, email, password });
-    await user.save();
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    const url = `http://localhost:3000/api/auth/activate/${token}`;
-    await sendEmail(user.email, 'Account Activation', `Click <a href="${url}">here</a> to activate your account`);
+    const user = await User.create({
+      firstName,
+      lastName,
+      email,
+      password,
+    });
 
-    res.status(201).send('User registered. Please check your email to activate your account.');
-  } catch (err) {
-    res.status(400).send(err.message);
+    const activationToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '1d',
+    });
+
+    const activationUrl = `${process.env.FRONTEND_URL}/activate/${activationToken}`;
+
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from:  process.env.EMAIL_USER,
+      to: user.email,
+      subject: 'Account Activation',
+      html: emailTemplate(activationUrl),
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(201).json({ message: 'User registered. Check email for activation link' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-exports.activateAccount = async (req, res) => {
-  const token = req.params.token;
+exports.activateUser = async (req, res) => {
+  const { token } = req.params;
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
-
-    if (!user) return res.status(400).send('Invalid token');
-    if (user.isActive) return res.status(400).send('Account already activated');
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid token' });
+    }
 
     user.isActive = true;
     await user.save();
 
-    res.send('Account activated successfully');
-  } catch (err) {
-    res.status(400).send('Invalid token');
+    res.status(200).json({ message: 'Account activated' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-exports.login = async (req, res) => {
+exports.loginUser = async (req, res) => {
+    
   const { email, password } = req.body;
 
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).send('Invalid email or password');
+    if (!user || !user.isActive) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(400).send('Invalid email or password');
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
 
-    if (!user.isActive) return res.status(400).send('Account is not activated');
+    const token = generateToken(user._id);
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-    res.send({ token });
-  } catch (err) {
-    res.status(400).send(err.message);
+    res.json({ token });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -66,33 +103,61 @@ exports.forgotPassword = async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).send('User not found');
+    if (!user) {
+      return res.status(400).json({ message: 'User not found' });
+    }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    const url = `http://localhost:3000/api/auth/reset-password/${token}`;
-    await sendEmail(user.email, 'Password Reset', `Click <a href="${url}">here</a> to reset your password`);
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    user.resetToken = resetToken;
+    user.resetTokenExpiration = Date.now() + 3600000; // 1 hour
+    await user.save();
 
-    res.send('Password reset email sent');
-  } catch (err) {
-    res.status(400).send(err.message);
+    const resetUrl = `${process.env.FRONTEND_URL}/resetpassword/${resetToken}`;
+
+    const transporter = nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: 'Password Reset',
+      html: emailTemplate(resetUrl),
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: 'Check your email for reset link' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
 exports.resetPassword = async (req, res) => {
-  const token = req.params.token;
+  const { token } = req.params;
   const { password } = req.body;
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    const user = await User.findOne({
+      resetToken: token,
+      resetTokenExpiration: { $gt: Date.now() },
+    });
 
-    if (!user) return res.status(400).send('Invalid token');
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
 
     user.password = password;
+    user.resetToken = undefined;
+    user.resetTokenExpiration = undefined;
     await user.save();
 
-    res.send('Password reset successfully');
-  } catch (err) {
-    res.status(400).send('Invalid token');
+    res.status(200).json({ message: 'Password reset successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
   }
 };

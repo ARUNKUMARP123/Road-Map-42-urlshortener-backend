@@ -1,12 +1,13 @@
 const mongoose = require('mongoose');
 
-const urlSchema = new mongoose.Schema({
+const URLSchema = new mongoose.Schema({
   longUrl: { type: String, required: true },
   shortUrl: { type: String, required: true, unique: true },
-  clickCount: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now }
+  urlCode: { type: String, required: true, unique: true },
+  date: { type: Date, default: Date.now },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  clicks: { type: Number, default: 0 },
 });
 
-const Url = mongoose.model('Url', urlSchema);
-
-module.exports = Url;
+const URL = mongoose.model('URL', URLSchema);
+module.exports = URL;

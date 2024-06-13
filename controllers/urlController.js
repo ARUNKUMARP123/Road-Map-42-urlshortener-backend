@@ -1,42 +1,61 @@
-const Url = require('../models/Url');
+
+const URL = require('../models/URL');
 const shortid = require('shortid');
 
-exports.createShortUrl = async (req, res) => {
+exports.shortenUrl = async (req, res) => {
   const { longUrl } = req.body;
+  const urlCode = shortid.generate();
+  const shortUrl = `${process.env.LOCAL_URL}/${urlCode}`;
 
   try {
-    const shortUrl = shortid.generate();
-    const newUrl = new Url({ longUrl, shortUrl });
+    let url = await URL.findOne({ longUrl });
 
-    await newUrl.save();
+    if (url) {
+      res.json(url);
+    } else {
+      url = new URL({
+        longUrl,
+        shortUrl,
+        urlCode,
+        createdBy: req.user.id,
+      });
 
-    res.send(newUrl);
-  } catch (err) {
-    res.status(400).send(err.message);
+      await url.save();
+      res.json(url);
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-exports.redirectShortUrl = async (req, res) => {
-  const { shortUrl } = req.params;
+exports.getUrl = async (req, res) => {
+  const { code } = req.params;
 
   try {
-    const url = await Url.findOne({ shortUrl });
-    if (!url) return res.status(404).send('URL not found');
+    const url = await URL.findOne({ urlCode: code });
 
-    url.clickCount++;
-    await url.save();
+    if (url) {
+      // Increment clicks
+      url.clicks++;
+      await url.save();
 
-    res.redirect(url.longUrl);
-  } catch (err) {
-    res.status(400).send(err.message);
+      return res.redirect(url.longUrl);
+    } else {
+      return res.status(404).json({ message: 'No URL found' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
-exports.getAllUrls = async (req, res) => {
+exports.getUrls = async (req, res) => {
   try {
-    const urls = await Url.find();
-    res.send(urls);
-  } catch (err) {
-    res.status(400).send(err.message);
+    const urls = await URL.find({ createdBy: req.user.id });
+    res.json(urls);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
   }
 };

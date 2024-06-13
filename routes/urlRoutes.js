@@ -1,10 +1,10 @@
 const express = require('express');
-const { createShortUrl, redirectShortUrl, getAllUrls } = require('../controllers/urlController');
-const { authMiddleware } = require('../utils/authMiddleware');
+const { shortenUrl, getUrl, getUrls } = require('../controllers/urlController');
+const { protect } = require('../middleware/authMiddleware');
 const router = express.Router();
 
-router.post('/shorten', authMiddleware, createShortUrl);
-router.get('/:shortUrl', redirectShortUrl);
-router.get('/', authMiddleware, getAllUrls);
+router.post('/shorten', protect, shortenUrl);
+router.get('/:code', getUrl);
+router.get('/', protect, getUrls);
 
 module.exports = router;
