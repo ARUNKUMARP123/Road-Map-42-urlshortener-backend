@@ -1,5 +1,5 @@
 
-const URL = require('../models/URL');
+const URL = require('../models/Url');
 const shortid = require('shortid');
 
 exports.shortenUrl = async (req, res) => {
