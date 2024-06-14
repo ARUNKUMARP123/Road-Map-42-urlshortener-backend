@@ -3,7 +3,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-const { emailTemplate } = require('../config/mail');
+const { EmailTemplate, EmailTemplate2 } = require('../config/Gmail');
+
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -41,14 +42,14 @@ exports.registerUser = async (req, res) => {
       },
     });
 
-    const mailOptions = {
+    const  mailOptionsActivation = {
       from:  process.env.EMAIL_USER,
       to: user.email,
       subject: 'Account Activation',
-      html: emailTemplate(activationUrl),
+      html: EmailTemplate(activationUrl),
     };
 
-    await transporter.sendMail(mailOptions);
+    await transporter.sendMail( mailOptionsActivation);
 
     res.status(201).json({ message: 'User registered. Check email for activation link' });
   } catch (error) {
@@ -122,14 +123,14 @@ exports.forgotPassword = async (req, res) => {
         },
     });
 
-    const mailOptions = {
+    const mailOptionsReset = {
       from: process.env.EMAIL_USER,
       to: user.email,
       subject: 'Password Reset',
-      html: emailTemplate(resetUrl),
+      html: EmailTemplate2(resetUrl),
     };
 
-    await transporter.sendMail(mailOptions);
+    await transporter.sendMail(mailOptionsReset);
 
     res.status(200).json({ message: 'Check your email for reset link' });
   } catch (error) {
