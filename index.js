@@ -20,6 +20,7 @@ connectDB();
 const allowedOrigins = [
   "http://localhost:5173",
   "https://main--urlshorten-app.netlify.app",
+  "https://urlshorten-app.netlify.app",
 ];
 
 // CORS configuration
