@@ -1,48 +1,42 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
 const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
-require('dotenv').config();
 const connectDB = require("./config/db");
+
+// Load environment variables from .env file
+dotenv.config();
+
 const app = express();
-const bodyparser = require("body-parser");
-
-// JSON parsing middleware
-app.use(express.json());
-
-  // List of allowed origins for CORS
-  const allowedOrigins = [
-    "http://localhost:5173",
-    "https://main--urlshorteb-app-2.netlify.app",
-  ];
-
-// CORS configuration
-const corsOptions = {
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true, // Allow cookies to be sent
-  };
-
-  app.use(cors(corsOptions));
-  app.use(bodyparser.json());
-
-// Middleware to set response headers for CORS
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", req.headers.origin);
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    res.header("Access-Control-Allow-Credentials", "true");
-    next();
-  });
+const PORT = process.env.PORT || 5000;
+const HOSTNAME = process.env.HOSTNAME || "0.0.0.0";
 
 // Connect to MongoDB
 connectDB();
+
+// List of allowed origins for CORS
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://urlshorteb-app-2.netlify.app",
+];
+
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true, // Allow cookies to be sent
+};
+
+// Middleware
+app.use(express.json()); // JSON parsing middleware
+app.use(cors(corsOptions)); // Enable CORS with options
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -54,12 +48,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Server error' });
 });
 
-
-
-
-
-const PORT = process.env.PORT || 4001;
-const HOSTNAME = process.env.HOSTNAME ||" 0.0.0.0";
+// Start server
 app.listen(PORT, HOSTNAME, () => {
-    console.log(`Server started at http://${HOSTNAME}:${PORT}`);
-  });
+  console.log(`Server started at http://${HOSTNAME}:${PORT}`);
+});
